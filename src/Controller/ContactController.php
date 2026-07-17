@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Dto\ContactRequestDto;
+use App\Dto\ErrorResponseDto;
 use App\Exception\ValidationException;
 use App\Service\ContactService;
 use Nelmio\ApiDocBundle\Attribute\Model;
@@ -60,8 +61,20 @@ final class ContactController extends AbstractController
                     type: 'object'
                 )
             ),
-            new OA\Response(response: 422, description: 'Validation error', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
-            new OA\Response(response: 429, description: 'Rate limit exceeded', content: new OA\JsonContent(ref: '#/components/schemas/ErrorResponse')),
+            new OA\Response(
+                response: 422,
+                description: 'Validation error',
+                content: new OA\JsonContent(
+                    ref: new Model(type: ErrorResponseDto::class)
+                )
+            ),
+            new OA\Response(
+                response: 429,
+                description: 'Rate limit exceeded',
+                content: new OA\JsonContent(
+                    ref: new Model(type: ErrorResponseDto::class)
+                )
+            ),
         ]
     )]
     public function create(

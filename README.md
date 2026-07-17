@@ -124,10 +124,9 @@ Production-образ: `Dockerfile.prod` (nginx слушает `$PORT`, migratio
 ## Запуск проекта
 
 ```bash
-git clone <repository>
+git clone https://github.com/Bahdanovich91/developer-contact-api.git
 cd developer-contact-api
 
-# Секреты и локальные переопределения (не коммитить)
 cp .env .env.local
 # В .env.local задать:
 #   OPENROUTER_API_KEY=...
@@ -161,7 +160,7 @@ curl http://localhost:8080/api/doc
 
 ## Переменные окружения
 
-Symfony загружает (по приоритету, реальные env Docker побеждают файлы):
+Symfony загружает (по приоритету):
 
 1. `.env`
 2. `.env.local` (gitignored)

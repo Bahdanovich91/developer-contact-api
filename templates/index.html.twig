@@ -44,19 +44,19 @@
                 <form id="contact-form" class="form-group">
                     <div class="form-group">
                         <label for="name">Имя</label>
-                        <input type="text" id="name" name="name" value="Антон" required>
+                        <input type="text" id="name" name="name" placeholder="Введите ваше имя" required>
                     </div>
                     <div class="form-group">
                         <label for="email">Email</label>
-                        <input type="email" id="email" name="email" value="test@example.com" required>
+                        <input type="email" id="email" name="email" placeholder="example@mail.com" required>
                     </div>
                     <div class="form-group">
                         <label for="phone">Телефон</label>
-                        <input type="text" id="phone" name="phone" value="+123456789" required>
+                        <input type="text" id="phone" name="phone" placeholder="+7 (999) 123-45-67" required>
                     </div>
                     <div class="form-group">
                         <label for="comment">Сообщение</label>
-                        <textarea id="comment" name="comment" required>Мой заказ задерживается. Пожалуйста, помогите.</textarea>
+                        <textarea id="comment" name="comment" placeholder="Опишите ваш вопрос..." required></textarea>
                     </div>
                     <button type="submit" class="submit-btn" id="send-btn">Отправить заявку</button>
                 </form>
@@ -65,7 +65,7 @@
 
                 <div class="endpoint"><span class="method">POST</span> /api/contact</div>
                 <p style="margin-top: 0.8rem; font-size: 0.9rem; color: #64748b;">
-                    ⚡ После отправки вы получите анализ тональности, категорию и автоматический ответ, а также письма владельцу и на указанный email.
+                    ⚡ После отправки вы получите анализ тональности, категорию и автоматический ответ. Письма владельцу и пользователю отправляются в песочницу Mailtrap.
                 </p>
             </div>
         </div>

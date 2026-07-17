@@ -104,4 +104,28 @@ final class OpenRouterAiService
             return AiAnalysisResult::fallback($this->fallbackReply);
         }
     }
+
+    public function isAvailable(): bool
+    {
+        if ('' === trim($this->apiKey)) {
+            return false;
+        }
+
+        try {
+            $response = $this->httpClient->request('GET', rtrim($this->apiUrl, '/').'/models', [
+                'timeout' => min(5, $this->timeout),
+                'headers' => [
+                    'Authorization' => 'Bearer '.$this->apiKey,
+                ],
+            ]);
+
+            return $response->getStatusCode() < 500;
+        } catch (\Throwable $exception) {
+            $this->aiLogger->warning('OpenRouter availability check failed', [
+                'message' => $exception->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
 }

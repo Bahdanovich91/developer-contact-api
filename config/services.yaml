@@ -39,3 +39,8 @@ services:
     App\EventSubscriber\ExceptionSubscriber:
         arguments:
             $environment: '%kernel.environment%'
+
+when@test:
+    services:
+        _defaults:
+            public: true

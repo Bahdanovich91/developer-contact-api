@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Controller;
+namespace App\Controller\Api;
 
 use App\Service\HealthCheckService;
 use OpenApi\Attributes as OA;

@@ -1,0 +1,78 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Developer Contact API{% endblock %}
+
+{% block stylesheets %}
+    <link rel="stylesheet" href="{{ asset('css/app.css') }}">
+{% endblock %}
+
+{% block javascripts %}
+    <script src="{{ asset('js/app.js') }}"></script>
+{% endblock %}
+
+{% block body %}
+    <div class="container">
+        <div class="header">
+            <h1>🧑‍💻 Developer Contact API</h1>
+            <p>REST API для обработки контактных заявок с AI-анализом через OpenRouter и отправкой писем через Mailtrap.</p>
+        </div>
+
+        <div class="grid">
+            <!-- Health Check -->
+            <div class="card">
+                <h2>❤️ Health Check</h2>
+                <p>Проверка состояния базы данных, AI-сервиса и почтового клиента.</p>
+                <button class="action-btn" data-target="health">Проверить состояние →</button>
+                <div class="endpoint"><span class="method">GET</span> /api/health</div>
+                <div id="health-result" class="result"></div>
+            </div>
+
+            <!-- Metrics -->
+            <div class="card">
+                <h2>📊 Metrics</h2>
+                <p>Агрегированная статистика по заявкам: общее количество, по категориям, за последние 24 часа и 7 дней.</p>
+                <button class="action-btn" data-target="metrics">Посмотреть метрики →</button>
+                <div class="endpoint"><span class="method">GET</span> /api/metrics</div>
+                <div id="metrics-result" class="result"></div>
+            </div>
+
+            <!-- Contact (POST) -->
+            <div class="card" style="grid-column: 1 / -1;">
+                <h2>✉️ Отправить тестовую заявку</h2>
+                <p>Заполните форму и отправьте заявку — получите JSON-ответ с анализом и автоответом.</p>
+
+                <form id="contact-form" class="form-group">
+                    <div class="form-group">
+                        <label for="name">Имя</label>
+                        <input type="text" id="name" name="name" value="Антон" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" value="test@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">Телефон</label>
+                        <input type="text" id="phone" name="phone" value="+123456789" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="comment">Сообщение</label>
+                        <textarea id="comment" name="comment" required>Мой заказ задерживается. Пожалуйста, помогите.</textarea>
+                    </div>
+                    <button type="submit" class="submit-btn" id="send-btn">Отправить заявку</button>
+                </form>
+
+                <div id="contact-result" class="result"></div>
+
+                <div class="endpoint"><span class="method">POST</span> /api/contact</div>
+                <p style="margin-top: 0.8rem; font-size: 0.9rem; color: #64748b;">
+                    ⚡ После отправки вы получите анализ тональности, категорию и автоматический ответ, а также письма владельцу и на указанный email.
+                </p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Разработано с использованием Symfony 7, PostgreSQL, OpenRouter и Mailtrap.</p>
+            <p><a href="https://github.com/Bahdanovich91/developer-contact-api" target="_blank">Исходный код на GitHub</a></p>
+        </div>
+    </div>
+{% endblock %}

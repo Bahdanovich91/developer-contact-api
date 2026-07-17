@@ -1,0 +1,9 @@
+nelmio_api_doc:
+    documentation:
+        info:
+            title: Developer Contact API
+            description: REST API for developer contact form
+            version: 1.0.0
+    areas:
+        path_patterns:
+            - ^/api(?!/doc)

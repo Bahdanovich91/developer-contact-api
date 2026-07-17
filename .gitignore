@@ -1,0 +1,31 @@
+
+###> symfony/framework-bundle ###
+/.env.local
+/.env.local.php
+/.env.*.local
+/config/secrets/prod/prod.decrypt.private.php
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+/phpunit.result.cache
+/coverage/
+###< phpunit/phpunit ###
+
+###> IDE / tooling ###
+/.idea/
+/.vscode/
+/node_modules/
+###< IDE / tooling ###
+
+###> OS / temp ###
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+###< OS / temp ###

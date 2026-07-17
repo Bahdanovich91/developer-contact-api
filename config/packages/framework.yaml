@@ -4,6 +4,8 @@ framework:
     session: false
     serializer:
         enabled: true
+    property_info:
+        enabled: true
     validation:
         enabled: true
 

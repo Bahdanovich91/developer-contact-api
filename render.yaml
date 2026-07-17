@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: developer-contact-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile.prod
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: prod
+      - key: APP_DEBUG
+        value: "0"
+      - key: APP_SECRET
+        generateValue: true
+      - key: DEFAULT_URI
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: contact-api-db
+          property: connectionString
+      - key: MAILER_DSN
+        sync: false
+      - key: OWNER_EMAIL
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Developer Contact API
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: OPENROUTER_MODEL
+        value: openai/gpt-4o
+      - key: OPENROUTER_TIMEOUT
+        value: "30"
+      - key: OPENROUTER_FALLBACK_REPLY
+        value: "Thank you for your message. We will contact you soon."
+      - key: CORS_ALLOW_ORIGIN
+        value: ".*"
+      - key: RUN_MIGRATIONS
+        value: "1"
+
+databases:
+  - name: contact-api-db
+    plan: free
+    databaseName: contact_api
+    user: contact_api

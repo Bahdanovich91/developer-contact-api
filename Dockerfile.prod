@@ -1,0 +1,68 @@
+# Production image for Render (nginx + PHP-FPM in one container)
+FROM php:8.4-fpm-bookworm AS base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    unzip \
+    libzip-dev \
+    libicu-dev \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    libpq-dev \
+    curl \
+    nginx \
+    gettext-base \
+    && docker-php-ext-configure intl \
+    && docker-php-ext-install -j$(nproc) \
+        pdo_pgsql \
+        intl \
+        zip \
+        opcache \
+        mbstring \
+    && pecl install apcu \
+    && docker-php-ext-enable apcu \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+FROM base AS vendor
+
+WORKDIR /app
+
+COPY composer.json composer.lock symfony.lock ./
+
+RUN composer install \
+    --no-dev \
+    --no-scripts \
+    --no-autoloader \
+    --prefer-dist \
+    --no-interaction
+
+FROM base AS app
+
+WORKDIR /var/www/html
+
+COPY --from=vendor /app/vendor ./vendor
+COPY . .
+
+RUN composer dump-autoload --optimize --classmap-authoritative --no-dev \
+    && mkdir -p var/cache var/log \
+    && chown -R www-data:www-data var
+
+COPY docker/php/php.prod.ini /usr/local/etc/php/conf.d/app.ini
+COPY docker/php/www.conf /usr/local/etc/php-fpm.d/zz-app.conf
+COPY docker/nginx/render.conf.template /etc/nginx/templates/default.conf.template
+COPY docker/php/entrypoint-prod.sh /usr/local/bin/app-entrypoint-prod.sh
+
+RUN chmod +x /usr/local/bin/app-entrypoint-prod.sh \
+    && rm -rf docker/nginx/default.conf tests .git
+
+ENV APP_ENV=prod
+ENV PORT=10000
+ENV RUN_MIGRATIONS=1
+
+EXPOSE 10000
+
+ENTRYPOINT ["app-entrypoint-prod.sh"]

@@ -6,6 +6,7 @@ namespace App\Service;
 
 use App\Entity\Contact;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\Mime\Address;
@@ -20,6 +21,8 @@ final class ContactMailerService
         private readonly string $mailFrom,
         private readonly string $mailFromName,
         private readonly string $fallbackReply,
+        #[Autowire('%env(MAILER_DSN)%')]
+        private readonly string $mailerDsn,
     ) {
     }
 
@@ -50,9 +53,11 @@ final class ContactMailerService
     public function isAvailable(): bool
     {
         try {
-            // Lightweight connectivity probe: create and validate DSN-backed transport readiness
-            // by sending a no-op check through transport if possible is not always available.
-            // We treat misconfigured empty DSN as unavailable.
+            $dsn = trim($this->mailerDsn);
+            if ('' === $dsn || str_starts_with($dsn, 'null://')) {
+                return false;
+            }
+
             return '' !== trim($this->mailFrom) && '' !== trim($this->ownerEmail);
         } catch (\Throwable) {
             return false;
@@ -69,13 +74,35 @@ final class ContactMailerService
                 'to' => $recipientType === 'owner' ? $this->ownerEmail : $contact->getEmail(),
             ]);
         } catch (TransportExceptionInterface $exception) {
+            // Mailtrap Sandbox free tier may reject the second message in a burst.
+            if (str_contains($exception->getMessage(), 'Too many emails per second')) {
+                $this->logger->warning('Mailer rate-limited, retrying once', [
+                    'type' => $recipientType,
+                    'contact_id' => $contact->getId(),
+                ]);
+
+                sleep(15);
+
+                try {
+                    $this->mailer->send($email);
+                    $this->logger->info('Contact email sent', [
+                        'type' => $recipientType,
+                        'contact_id' => $contact->getId(),
+                        'to' => $recipientType === 'owner' ? $this->ownerEmail : $contact->getEmail(),
+                        'retried' => true,
+                    ]);
+
+                    return;
+                } catch (TransportExceptionInterface $retryException) {
+                    $exception = $retryException;
+                }
+            }
+
             $this->logger->error('Failed to send contact email', [
                 'type' => $recipientType,
                 'contact_id' => $contact->getId(),
                 'error' => $exception->getMessage(),
             ]);
-
-            // Do not break the main flow if mail delivery fails
         }
     }
 

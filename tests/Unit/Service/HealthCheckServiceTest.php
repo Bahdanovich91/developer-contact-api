@@ -161,6 +161,40 @@ final class HealthCheckServiceTest extends KernelTestCase
         );
     }
 
+    public function testCheckReturnsDegradedWhenMailerIsUnavailable(): void
+    {
+        self::bootKernel();
+
+        static::getContainer()->set(
+            HttpClientInterface::class,
+            new MockHttpClient([
+                new MockResponse(
+                    json_encode(['data' => []], JSON_THROW_ON_ERROR),
+                    ['http_code' => 200]
+                ),
+            ])
+        );
+
+        $connection = $this->createStub(Connection::class);
+        $result = $this->createStub(Result::class);
+
+        $connection
+            ->method('executeQuery')
+            ->willReturn($result);
+
+        $service = new HealthCheckService(
+            connection: $connection,
+            openRouterAiService: $this->createOpenRouterService(),
+            contactMailerService: $this->createMailerService('null://null'),
+            logger: new NullLogger(),
+        );
+
+        $health = $service->check();
+
+        self::assertSame('degraded', $health['status']);
+        self::assertSame('degraded', $health['checks']['mailer']['status']);
+    }
+
 
     private function createOpenRouterService(): OpenRouterAiService
     {
@@ -178,8 +212,9 @@ final class HealthCheckServiceTest extends KernelTestCase
     }
 
 
-    private function createMailerService(): ContactMailerService
-    {
+    private function createMailerService(
+        string $mailerDsn = 'smtp://user:pass@sandbox.smtp.mailtrap.io:2525',
+    ): ContactMailerService {
         $container = static::getContainer();
 
         return new ContactMailerService(
@@ -189,6 +224,7 @@ final class HealthCheckServiceTest extends KernelTestCase
             mailFrom: (string) $container->getParameter('app.mail_from'),
             mailFromName: (string) $container->getParameter('app.mail_from_name'),
             fallbackReply: (string) $container->getParameter('app.openrouter.fallback_reply'),
+            mailerDsn: $mailerDsn,
         );
     }
 }

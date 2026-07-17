@@ -1,101 +1,254 @@
 # Developer Contact API
 
-Symfony REST API для обработки контактных заявок.
+Symfony 7 REST API для обработки контактных заявок с AI-анализом через OpenRouter и отправкой писем через Mailtrap Sandbox.
 
-Проект реализует backend для формы обратной связи:
+## Описание
 
-- приём и валидация заявок;
-- сохранение данных в базу;
-- AI-анализ текста через OpenRouter;
-- определение категории и тональности сообщения;
-- автоматический ответ пользователю;
-- отправка уведомлений владельцу;
-- rate limit защиты;
-- health checks;
-- метрики;
-- покрытие PHPUnit тестами.
+Backend для формы обратной связи:
 
----
+1. Принимает и валидирует заявку (`POST /api/contact`).
+2. Сохраняет контакт в PostgreSQL.
+3. Анализирует текст через OpenRouter (`sentiment`, `category`, `autoReply`).
+4. Отправляет уведомление владельцу и auto-reply пользователю.
+5. Защищает endpoint rate limit’ом.
+6. Отдаёт health checks, metrics и Swagger UI.
 
-# Stack
-
-- PHP 8.4
-- Symfony 7
-- Doctrine ORM
-- MySQL 8.4
-- Symfony Validator
-- Symfony Serializer
-- Symfony Mailer
-- Symfony RateLimiter
-- Symfony HttpClient
-- Monolog
-- PHPUnit
-- Docker Compose
-- OpenRouter API
-- Mailpit / Mailtrap
+При ошибке AI используется fallback-ответ; ошибки SMTP не ломают создание заявки.
 
 ---
 
-# Architecture
+## Стек технологий
 
-Используется простая слоистая архитектура:
-
-```
-Controller
-    ↓
-DTO
-    ↓
-Service
-    ↓
-Repository
-    ↓
-Entity
-```
-
-## Ответственность слоёв
-
-| Слой | Назначение |
+| Технология | Назначение |
 |---|---|
-| Controller | HTTP запросы, ответы API, Swagger |
-| DTO | Входные данные и валидация |
-| Service | Бизнес-логика |
-| Repository | Работа с базой данных |
-| Entity | Модель данных Doctrine |
+| PHP 8.4 | Runtime |
+| Symfony 7.4 | Framework |
+| Doctrine ORM + Migrations | PostgreSQL persistence |
+| PostgreSQL 16 | База данных |
+| Symfony Validator / Serializer | Валидация и DTO |
+| Symfony HttpClient | OpenRouter API |
+| Symfony Mailer | SMTP (Mailtrap) |
+| Symfony RateLimiter | Лимит запросов |
+| Monolog | Логирование (`api`, `ai`) |
+| Nelmio ApiDoc / CORS | Swagger UI и CORS |
+| PHPUnit | Unit + Functional тесты |
+| Docker Compose | Локальный запуск |
+| Render (`Dockerfile.prod`) | Production deployment |
 
 ---
 
-# Features
+## Архитектура
 
-## Contact API
-
-### Создание заявки
+Слоистая архитектура без лишних абстракций:
 
 ```
-POST /api/contact
+Controller  →  DTO  →  Service  →  Repository  →  Entity / внешние API
 ```
 
-Процесс:
+| Слой | Ответственность |
+|---|---|
+| `Controller` | HTTP, JSON-ответы, OpenAPI атрибуты |
+| `Dto` | Входные данные и контракты ответов |
+| `Service` | Бизнес-логика (contact, AI, mail, health, metrics) |
+| `Repository` | Doctrine-доступ к Contact |
+| `Entity` / `Enum` | Модель и значения `sentiment` / `category` |
+| `EventSubscriber` | Логирование API и единый JSON error handler |
 
-1. Проверка входных данных.
-2. Проверка rate limit.
-3. Создание Contact.
-4. Сохранение в MySQL.
-5. Отправка текста в OpenRouter.
-6. Получение анализа:
-    - sentiment
-    - category
-    - auto reply
-7. Отправка email владельцу.
-8. Отправка ответа пользователю.
-9. Возврат результата API.
+Основной поток `POST /api/contact`:
+
+```
+ContactController
+  → ContactService
+      → ContactRepository::save()
+      → OpenRouterAiService::analyze()
+      → ContactRepository::save() (AI fields)
+      → ContactMailerService::sendOwnerNotification()
+      → ContactMailerService::sendUserAutoReply()
+```
 
 ---
 
-# API
+## Структура проекта
 
-## POST `/api/contact`
+```
+developer-contact-api/
+├── bin/
+├── config/
+│   ├── packages/          # framework, doctrine, mailer, monolog, nelmio, …
+│   ├── routes/
+│   └── services.yaml
+├── docker/
+│   ├── nginx/             # default.conf (dev), render.conf.template (prod)
+│   └── php/               # entrypoint, php.ini, entrypoint-prod.sh
+├── migrations/
+├── public/
+├── src/
+│   ├── Controller/        # Contact, Health, Metrics
+│   ├── Dto/
+│   ├── Entity/
+│   ├── Enum/
+│   ├── EventSubscriber/
+│   ├── Exception/
+│   ├── Repository/
+│   └── Service/
+├── tests/
+│   ├── Functional/
+│   └── Unit/
+├── Dockerfile             # local PHP-FPM image
+├── Dockerfile.prod        # nginx + PHP-FPM for Render
+├── docker-compose.yml
+├── render.yaml
+├── .env                   # defaults (без секретов)
+├── .env.dev / .env.test
+└── README.md
+```
 
-### Request
+---
+
+## Docker (локально)
+
+Сервисы Compose:
+
+| Service | Описание |
+|---|---|
+| `app` | PHP 8.4-FPM (`contact_api_app`) |
+| `nginx` | HTTP `:8080` → PHP-FPM |
+| `postgres` | PostgreSQL 16 (`:5432` на хосте) |
+| `mailer` | Mailpit (опционально; по умолчанию проект шлёт в Mailtrap) |
+| `composer` | profile `tools` |
+
+Production-образ: `Dockerfile.prod` (nginx слушает `$PORT`, migrations в entrypoint).
+
+---
+
+## Запуск проекта
+
+```bash
+git clone <repository>
+cd developer-contact-api
+
+# Секреты и локальные переопределения (не коммитить)
+cp .env .env.local
+# В .env.local задать:
+#   OPENROUTER_API_KEY=...
+#   MAILER_DSN=smtp://USERNAME:PASSWORD@sandbox.smtp.mailtrap.io:2525
+#   OWNER_EMAIL=...
+#   MAIL_FROM=...
+
+docker compose up -d --build
+docker compose exec app composer install
+docker compose exec app php bin/console doctrine:migrations:migrate --no-interaction
+docker compose exec app php bin/console cache:clear
+```
+
+Проверка:
+
+```bash
+curl http://localhost:8080/api/health
+curl http://localhost:8080/api/doc
+```
+
+| URL | Назначение |
+|---|---|
+| http://localhost:8080 | API |
+| http://localhost:8080/api/doc | Swagger UI |
+| http://localhost:8080/api/doc.json | OpenAPI JSON |
+| http://localhost:8025 | Mailpit UI (если используется локальный SMTP) |
+
+Контейнер приложения: `app` (не `php`).
+
+---
+
+## Переменные окружения
+
+Symfony загружает (по приоритету, реальные env Docker побеждают файлы):
+
+1. `.env`
+2. `.env.local` (gitignored)
+3. `.env.$APP_ENV` (например `.env.dev`)
+4. `.env.$APP_ENV.local`
+
+Docker Compose читает `.env` / `.env.local` и пробрасывает значения в контейнер `app`.
+
+| Variable | Описание |
+|---|---|
+| `APP_ENV` | `dev` / `test` / `prod` |
+| `APP_SECRET` | Symfony secret |
+| `DATABASE_URL` | PostgreSQL DSN |
+| `MAILER_DSN` | SMTP DSN (Mailtrap Sandbox) |
+| `OWNER_EMAIL` | Email владельца (уведомление о заявке) |
+| `MAIL_FROM` | From address |
+| `MAIL_FROM_NAME` | From display name |
+| `OPENROUTER_API_KEY` | Ключ OpenRouter |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
+| `OPENROUTER_MODEL` | например `openai/gpt-4o` |
+| `OPENROUTER_TIMEOUT` | Таймаут HTTP (сек) |
+| `OPENROUTER_FALLBACK_REPLY` | Ответ при ошибке AI |
+| `CORS_ALLOW_ORIGIN` | Regex / origin для CORS |
+| `RUN_MIGRATIONS` | `1` — миграции при старте контейнера |
+
+Секреты не хранить в git: только в `.env.local` или в Render Dashboard.
+
+---
+
+## OpenRouter
+
+Сервис: `App\Service\OpenRouterAiService`.
+
+- Endpoint: `POST {OPENROUTER_BASE_URL}/chat/completions`
+- Auth: `Authorization: Bearer {OPENROUTER_API_KEY}`
+- В запросе задаётся `max_tokens` (иначе возможен HTTP 402 из‑за дефолтного бюджета токенов)
+- Ответ модели — JSON: `sentiment`, `category`, `autoReply`
+- Health probe: `GET {OPENROUTER_BASE_URL}/models`
+- Логи: Monolog channel `ai` (без утечки API key)
+- При любой ошибке — `AiAnalysisResult::fallback()`, заявка всё равно сохраняется
+
+---
+
+## Mailtrap Sandbox
+
+Используется Symfony Mailer + `ContactMailerService`.
+
+DSN:
+
+```env
+MAILER_DSN=smtp://USERNAME:PASSWORD@sandbox.smtp.mailtrap.io:2525
+```
+
+Пример (подставить свои credentials из Mailtrap → Email Testing → SMTP Settings):
+
+```env
+MAILER_DSN=smtp://b3a250f01bf3f5:YOUR_PASSWORD@sandbox.smtp.mailtrap.io:2525
+```
+
+На одно `POST /api/contact` уходит два письма:
+
+1. **Владельцу** (`OWNER_EMAIL`) — данные заявки + AI-анализ.
+2. **Пользователю** — auto-reply из OpenRouter (или fallback).
+
+`TransportException` логируется и **не** прерывает создание Contact.
+
+На free-плане Mailtrap Sandbox второе письмо подряд может получить `550 Too many emails per second`.
+`ContactMailerService` делает один повтор с паузой; оба письма всё равно появляются в Inbox.
+
+Проверка: [Mailtrap](https://mailtrap.io/) → Email Testing → Sandbox → Inbox.
+
+---
+
+## Swagger
+
+- UI: http://localhost:8080/api/doc
+- JSON: http://localhost:8080/api/doc.json
+
+Документация строится атрибутами OpenAPI на контроллерах (Nelmio ApiDoc Bundle).
+
+---
+
+## API
+
+### `POST /api/contact`
+
+Request:
 
 ```json
 {
@@ -106,9 +259,7 @@ POST /api/contact
 }
 ```
 
----
-
-### Response 201
+Response `201`:
 
 ```json
 {
@@ -119,354 +270,59 @@ POST /api/contact
     "email": "john@example.com",
     "phone": "+1234567890",
     "comment": "I need help with my order",
-    "sentiment": "positive",
+    "sentiment": "neutral",
     "category": "support",
-    "auto_reply": "Thank you for contacting us",
-    "created_at": "2026-07-16T17:00:00+00:00"
+    "auto_reply": "Thank you for contacting us…",
+    "created_at": "2026-07-17T12:00:00+00:00"
   }
 }
 ```
 
----
+Ошибки:
 
-## Validation error
+| HTTP | Случай |
+|---|---|
+| `422` | Validation failed |
+| `429` | Rate limit (`Retry-After`) |
 
-```json
-{
-  "success": false,
-  "message": "Validation failed",
-  "errors": [
-    {
-      "field": "email",
-      "message": "This value is not valid."
-    }
-  ]
-}
-```
+Rate limit (по умолчанию): 10 запросов / минуту с IP (`config/packages/rate_limiter.yaml`).
 
----
+### `GET /api/health`
 
-## Rate limit
+Проверяет database, OpenRouter, mailer. Статусы: `ok` | `degraded` | `error`.  
+HTTP `503` только при overall `error` (обычно недоступна БД).
 
-При превышении лимита:
+### `GET /api/metrics`
 
-```
-HTTP 429
-```
-
-Ответ содержит:
-
-```
-Retry-After
-```
+Агрегаты по заявкам: total, by sentiment/category, last 24h / 7d.
 
 ---
 
-# Health Check
-
-```
-GET /api/health
-```
-
-Проверяет:
-
-- Database connection
-- OpenRouter availability
-- Mail configuration
-
-
-Пример:
+## PHPUnit
 
 ```bash
-curl http://localhost:8080/api/health
+docker compose exec app php bin/phpunit
 ```
+
+Покрытие:
+
+- Unit: DTO, OpenRouterAiService, ContactMailerService, HealthCheckService, MetricsService
+- Functional: Contact / Health / Metrics endpoints
+
+Тестовый env: `.env.test` (`MAILER_DSN=null://null`, stub OpenRouter URL).
 
 ---
 
-# Metrics
-
-```
-GET /api/metrics
-```
-
-Возвращает статистику заявок:
-
-- количество заявок;
-- распределение по категориям;
-- распределение по тональности.
-
----
-
-# AI Integration
-
-Используется:
-
-OpenRouter API
-
-Сервис:
-
-```
-App\Service\OpenRouterAiService
-```
-
-Возможности:
-
-- анализ текста;
-- определение категории;
-- определение эмоциональной окраски;
-- генерация ответа пользователю.
-
-Если API недоступен:
-
-- ошибка логируется;
-- используется fallback ответ;
-- запрос пользователя не теряется.
-
----
-
-# Email
-
-Используется Symfony Mailer.
-
-Локально:
-
-```
-Mailpit
-```
-
-В production:
-
-```
-Mailtrap SMTP
-```
-
-Отправляются два письма:
-
-## Владельцу
-
-Содержит:
-
-- данные пользователя;
-- текст сообщения;
-- AI анализ.
-
-## Пользователю
-
-Содержит:
-
-- автоматический ответ.
-
-Ошибки отправки email не ломают создание заявки.
-
----
-
-# Docker
-
-Проект запускается через Docker Compose.
-
-Сервисы:
-
-| Service | Назначение |
-|-|-|
-| nginx | Web сервер |
-| php | PHP-FPM приложение |
-| mysql | База данных |
-| mailpit | Локальный SMTP сервер |
-
----
-
-# Запуск проекта
-
-## Клонирование
+## Команды Symfony
 
 ```bash
-git clone <repository>
-
-cd developer-contact-api
+docker compose exec app php bin/console about
+docker compose exec app php bin/console cache:clear
+docker compose exec app php bin/console doctrine:migrations:migrate --no-interaction
+docker compose exec app php bin/console doctrine:schema:validate
+docker compose exec app php bin/console lint:container
+docker compose exec app php bin/console debug:dotenv
+docker compose logs -f app nginx
 ```
 
 ---
-
-## Создание окружения
-
-```bash
-cp .env .env.local
-```
-
-Настроить переменные:
-
-```
-DATABASE_URL
-MAILER_DSN
-OPENROUTER_API_KEY
-OWNER_EMAIL
-```
-
----
-
-## Запуск Docker
-
-```bash
-docker compose up -d --build
-```
-
----
-
-## Установка зависимостей
-
-```bash
-docker compose exec php composer install
-```
-
----
-
-## Миграции
-
-```bash
-docker compose exec php php bin/console doctrine:migrations:migrate
-```
-
----
-
-## Очистка кеша
-
-```bash
-docker compose exec php php bin/console cache:clear
-```
-
----
-
-# URLs
-
-| URL | Назначение |
-|-|-|
-| http://localhost:8080 | API |
-| http://localhost:8080/api/doc | Swagger |
-| http://localhost:8025 | Mailpit |
-
----
-
-# Environment Variables
-
-| Variable | Description |
-|-|-|
-| DATABASE_URL | MySQL connection |
-| MAILER_DSN | SMTP connection |
-| OWNER_EMAIL | Email владельца |
-| MAIL_FROM | Email отправителя |
-| MAIL_FROM_NAME | Имя отправителя |
-| OPENROUTER_API_KEY | OpenRouter API key |
-| OPENROUTER_MODEL | AI model |
-| OPENROUTER_FALLBACK_REPLY | Ответ при ошибке AI |
-| CONTACT_RATE_LIMIT | Количество запросов |
-| CONTACT_RATE_INTERVAL | Интервал rate limit |
-| APP_SECRET | Symfony secret |
-
----
-
-# Tests
-
-Используется PHPUnit.
-
-Запуск:
-
-```bash
-docker compose exec php php bin/phpunit
-```
-
-Покрыты:
-
-## Unit tests
-
-- DTO validation;
-- AI service;
-- Mail service;
-- Health checks;
-- Metrics service.
-
-## Functional tests
-
-- API endpoints;
-- Validation responses;
-- HTTP responses.
-
----
-
-# Useful commands
-
-Проверка контейнера:
-
-```bash
-docker compose ps
-```
-
-Логи:
-
-```bash
-docker compose logs -f php nginx
-```
-
-Symfony:
-
-```bash
-docker compose exec php php bin/console about
-```
-
-Проверка Doctrine:
-
-```bash
-docker compose exec php php bin/console doctrine:schema:validate
-```
-
-Проверка контейнера:
-
-```bash
-docker compose exec php php bin/console lint:container
-```
-
----
-
-# Project Structure
-
-```
-src/
-├── Controller/
-│
-├── DTO/
-│
-├── Entity/
-│
-├── Repository/
-│
-├── Service/
-│
-├── Exception/
-│
-└── Enum/
-
-
-config/
-├── packages/
-└── services.yaml
-
-
-migrations/
-
-tests/
-├── Functional/
-└── Unit/
-```
-
----
-
-# Deployment
-
-Проект готов к развёртыванию через Docker.
-
-Для production необходимо:
-
-1. Настроить MySQL.
-2. Настроить SMTP.
-3. Добавить OpenRouter API key.
-4. Выполнить миграции.
-5. Запустить контейнеры.

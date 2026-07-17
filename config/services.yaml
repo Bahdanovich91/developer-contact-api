@@ -1,17 +1,18 @@
 # yaml-language-server: $schema=../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 
 parameters:
-    app.owner_email: '%env(CONTACT_OWNER_EMAIL)%'
+    env(OWNER_EMAIL): ''
+    env(CONTACT_OWNER_EMAIL): ''
+    app.owner_email: '%env(default:contact_owner_email:OWNER_EMAIL)%'
+    contact_owner_email: '%env(CONTACT_OWNER_EMAIL)%'
     app.mail_from: '%env(MAIL_FROM)%'
     app.mail_from_name: '%env(MAIL_FROM_NAME)%'
 
     app.openrouter.api_key: '%env(OPENROUTER_API_KEY)%'
     app.openrouter.api_url: '%env(OPENROUTER_BASE_URL)%'
     app.openrouter.model: '%env(OPENROUTER_MODEL)%'
-
-    # временно дефолты для dev
-    app.openrouter.timeout: 30
-    app.openrouter.fallback_reply: 'Спасибо за ваше сообщение. Мы скоро свяжемся с вами.'
+    app.openrouter.timeout: '%env(int:OPENROUTER_TIMEOUT)%'
+    app.openrouter.fallback_reply: '%env(OPENROUTER_FALLBACK_REPLY)%'
 
 
 services:

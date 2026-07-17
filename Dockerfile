@@ -8,10 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
+    libpq-dev \
     curl \
     && docker-php-ext-configure intl \
     && docker-php-ext-install -j$(nproc) \
-        pdo_mysql \
+        pdo_pgsql \
         intl \
         zip \
         opcache \

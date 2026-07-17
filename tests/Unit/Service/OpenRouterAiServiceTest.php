@@ -7,6 +7,7 @@ namespace App\Tests\Unit\Service;
 use App\Dto\ContactRequestDto;
 use App\Service\OpenRouterAiService;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\HttpClient\Exception\TimeoutException;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
@@ -59,6 +60,38 @@ final class OpenRouterAiServiceTest extends KernelTestCase
         self::assertSame('Thanks for the feedback!', $result->autoReply);
     }
 
+    public function testAnalyzePostsToChatCompletionsEndpoint(): void
+    {
+        $requestUrl = null;
+
+        $service = $this->createService(new MockHttpClient(function (
+            string $method,
+            string $url,
+        ) use (&$requestUrl): MockResponse {
+            $requestUrl = $url;
+
+            return new MockResponse(json_encode([
+                'choices' => [
+                    [
+                        'message' => [
+                            'content' => json_encode([
+                                'sentiment' => 'neutral',
+                                'category' => 'support',
+                                'autoReply' => 'We will help you soon.',
+                            ], JSON_THROW_ON_ERROR),
+                        ],
+                    ],
+                ],
+            ], JSON_THROW_ON_ERROR), ['http_code' => 200]);
+        }));
+
+        $service->analyze($this->createRequestDto());
+
+        $baseUrl = rtrim((string) static::getContainer()->getParameter('app.openrouter.api_url'), '/');
+
+        self::assertSame($baseUrl.'/chat/completions', $requestUrl);
+    }
+
     public function testFallbackOnHttpError(): void
     {
         $service = $this->createService(new MockHttpClient([
@@ -70,6 +103,18 @@ final class OpenRouterAiServiceTest extends KernelTestCase
         self::assertTrue($result->usedFallback);
         self::assertSame('unknown', $result->sentiment);
         self::assertSame('other', $result->category);
+        self::assertSame($this->getFallbackReply(), $result->autoReply);
+    }
+
+    public function testFallbackOnTimeout(): void
+    {
+        $service = $this->createService(new MockHttpClient(function (): never {
+            throw new TimeoutException('Idle timeout reached.');
+        }));
+
+        $result = $service->analyze($this->createRequestDto());
+
+        self::assertTrue($result->usedFallback);
         self::assertSame($this->getFallbackReply(), $result->autoReply);
     }
 
@@ -109,6 +154,15 @@ final class OpenRouterAiServiceTest extends KernelTestCase
         ]));
 
         self::assertTrue($service->isAvailable());
+    }
+
+    public function testIsAvailableReturnsFalseOnUnauthorizedResponse(): void
+    {
+        $service = $this->createService(new MockHttpClient([
+            new MockResponse('unauthorized', ['http_code' => 401]),
+        ]));
+
+        self::assertFalse($service->isAvailable());
     }
 
     private function createService(MockHttpClient $httpClient, ?string $apiKey = null): OpenRouterAiService
